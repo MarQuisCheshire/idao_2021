@@ -51,25 +51,24 @@ class ImgDataset(Dataset):
 
 
 class PartDataset(Dataset):
-    def __init__(self, dataset, left, right):
+    def __init__(self, dataset, indices):
         self.dataset = dataset
-        self.left = left
-        self.right = right
+        self.indices = indices
 
     def __len__(self):
-        return self.right - self.left
+        return len(self.indices)
 
     def __getitem__(self, item):
-        assert item < len(self)
-        return self.dataset[self.left + item]
+        return self.dataset[self.indices[item]]
 
 
 if __name__ == '__main__':
     ds = ImgDataset('D:\\IDAO\\data\\train', np.array)
-    dl = torch.utils.data.DataLoader(ds, 100, shuffle=True, drop_last=True, num_workers=4)
-    from tqdm import tqdm
-
-    c = 0
-    for i, batch in tqdm(enumerate(dl)):
-        c += len(batch['cls'])
-    print(len(ds), c)
+    print(ds[0]['img'].shape)
+    # dl = torch.utils.data.DataLoader(ds, 100, shuffle=True, drop_last=True, num_workers=4)
+    # from tqdm import tqdm
+    #
+    # c = 0
+    # for i, batch in tqdm(enumerate(dl)):
+    #     c += len(batch['cls'])
+    # print(len(ds), c)
