@@ -60,7 +60,7 @@ class PartDataset(Dataset):
         return self.right - self.left
 
     def __getitem__(self, item):
-        assert item < self.right
+        assert item < len(self)
         return self.dataset[self.left + item]
 
 
