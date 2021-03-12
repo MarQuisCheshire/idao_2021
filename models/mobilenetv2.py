@@ -121,7 +121,20 @@ class MobileNetV2(torch.nn.Module):
 
 
 if __name__ == '__main__':
+    # Test size
     net = MobileNetV2(first_channels=20).cuda()
-    img = torch.rand(30, 1, 576, 576, device='cuda:0')
+    img = torch.rand(24, 1, 576, 576, device='cuda:0')
 
     cls, energy = net(img)
+    ((cls ** 2).mean() + (energy ** 2).mean()).backward()
+    del net
+
+    from thop import profile, clever_format
+    net = MobileNetV2(first_channels=20)
+    print(net)
+    # print(net.params_full)
+    x = torch.rand(1, 1, 576, 576)
+    flops, params = profile(net, inputs=(x,))
+
+    flops, params = clever_format([flops, params], "%.3f")
+    print(f'flops:{flops}, params:{params}')
