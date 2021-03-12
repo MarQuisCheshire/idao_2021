@@ -44,12 +44,20 @@ class SEAttention(torch.nn.Module):
         return x * y
 
 
+class Swish(torch.nn.Module):
+    def forward(self, x):
+        return torch.sigmoid(x) * x
+
+
 normalizations = {
-    'BatchNorm': torch.nn.BatchNorm2d
+    'BatchNorm': torch.nn.BatchNorm2d,
+    'InstanceNorm': torch.nn.InstanceNorm2d,
 }
 
 activations = {
-    'PReLU': torch.nn.PReLU
+    'PReLU': torch.nn.PReLU,
+    'ReLU': lambda _: torch.nn.ReLU(True),
+    'Swish': lambda _: Swish(),
 }
 
 
@@ -130,6 +138,7 @@ if __name__ == '__main__':
     del net
 
     from thop import profile, clever_format
+
     net = MobileNetV2(first_channels=20)
     print(net)
     # print(net.params_full)
