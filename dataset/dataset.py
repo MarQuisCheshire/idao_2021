@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Union
 
 import numpy as np
-import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
@@ -17,13 +16,14 @@ class ImgDataset(Dataset):
     def __init__(self, path: Union[str, Path], transform=None):
         self.path = path if isinstance(path, Path) else Path(path)
         self.transform = transform
-        self.search()
+        self._search()
 
-    def search(self):
+    def _search(self):
         self.paths = []
         self.cls = []
         self.energy = []
         cls_indices = dict(ER=0, He_NR=1)
+        energy_indices = {1: 0, 3: 1, 6: 2, 10: 3, 20: 4, 30: 5}
 
         for path, dirs, files in os.walk(str(self.path.resolve())):
             for file in filter(lambda x: x.endswith('.png'), files):
@@ -34,7 +34,7 @@ class ImgDataset(Dataset):
                     assert len(splitted) == 3, "Invalid data"
                     cls = f'{splitted[0]}_{splitted[1]}'
                     energy = splitted[2]
-                self.energy.append(int(energy))
+                self.energy.append(energy_indices[int(energy)])
                 self.cls.append(cls_indices[cls])
                 self.paths.append(os.path.join(path, file))
 
