@@ -7,7 +7,7 @@ import torch
 import torchvision
 from pytorch_lightning import Trainer
 
-from engine.controller import Controller
+from engine import Controller
 from models import MobileNetV2
 
 
