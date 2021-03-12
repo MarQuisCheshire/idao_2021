@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import pytorch_lightning
 import torch
 import torchvision
 from pytorch_lightning import Trainer
@@ -64,6 +65,7 @@ def main():
         'module_factory': lambda: MobileNetV2(first_channels=20)
     })
 
+    pytorch_lightning.seed_everything(cfg.seed)
     torch.cuda.empty_cache()
     os.makedirs(cfg.path_to_results, exist_ok=True)
     init_logging(cfg.path_to_results)
