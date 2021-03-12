@@ -51,8 +51,8 @@ def init_logging(log_path):
 
 def main():
     cfg = DictWrapper({
-        'optim_factory': lambda p: torch.optim.SGD(p, 0.1, 0.9, weight_decay=0.00001),
-        'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 100, 0.1, last_epoch),
+        'optim_factory': lambda p: torch.optim.SGD(p, 0.01, 0.9, weight_decay=0.00001),
+        'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 10, 0.1, last_epoch),
         'path': 'D:\\IDAO\\data\\train',
         'path_to_checkpoint': None,
         'path_to_results': 'D:\\IDAO\\results\\1',
@@ -75,7 +75,7 @@ def main():
                       logger=False,
                       checkpoint_callback=False,
                       num_sanity_val_steps=0,
-                      max_epochs=500,
+                      max_epochs=50,
                       )
     trainer.fit(controller)
 

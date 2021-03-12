@@ -49,17 +49,17 @@ class Controller(pl.LightningModule):
         return pred_cls, pred_energy, batch['cls'], batch['energy']
 
     def validation_epoch_end(self, outputs: List[Tuple[torch.Tensor, torch.Tensor, List, List]]) -> None:
-        pred_cls, pred_energy, cls, energy = zip(*outputs)
+        pred_cls, pred_energy, cls, energy = [torch.cat(i, dim=0) for i in zip(*outputs)]
 
         # TODO: add threshold
         acc = ((torch.argmax(pred_cls, dim=1) == cls) & (torch.argmax(pred_energy, dim=1) == energy)).float().mean()
-        mae_energy = torch.abs(torch.argmax(pred_energy, dim=1) - energy).mean()
+        # mae_energy = torch.abs(torch.argmax(pred_energy, dim=1) - energy).mean()
         # TODO other metrics
-        logging.info(f'EPOCH {self.current_epoch}\tAccuracy = {acc}')
-        logging.info(f'EPOCH {self.current_epoch}\tMAE Energy = {mae_energy}')
+        logging.info(f'\nEPOCH {self.current_epoch}\tAccuracy = {acc}')
+        # logging.info(f'\nEPOCH {self.current_epoch}\tMAE Energy = {mae_energy}')
 
     def training_epoch_end(self, outputs: List[Any]) -> None:
-        logging.info(f'EPOCH {self.current_epoch}\tLoss {self.running_loss.loss}' + '\n' * 3)
+        logging.info(f'\nEPOCH {self.current_epoch}\tLoss {self.running_loss.loss}' + '\n' * 3)
         self.save()
 
     # Configuration
