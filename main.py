@@ -55,7 +55,7 @@ def main():
         'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 10, 0.1, last_epoch),
         'path': 'D:\\IDAO\\data\\train',
         'path_to_checkpoint': None,
-        'path_to_results': 'D:\\IDAO\\results\\1',
+        'path_to_results': 'D:\\IDAO\\results\\2',
         'batch_size': 16,
         'transform': torchvision.transforms.Compose([
             torchvision.transforms.Lambda(np.array),
