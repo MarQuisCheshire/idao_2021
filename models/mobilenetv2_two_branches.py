@@ -1,6 +1,6 @@
 import torch
 
-from models.blocks import Swish, BuildingBlock, SEAttention
+from models.blocks import Swish, BuildingBlock, SEAttention, RevGrad
 
 normalizations = {
     'BatchNorm': torch.nn.BatchNorm2d,
@@ -14,13 +14,14 @@ activations = {
 }
 
 
-class MobileNetV2(torch.nn.Module):
+class MobileNetV2TwoBranches(torch.nn.Module):
     def __init__(self,
                  img_channels=1,
                  first_channels=32,
                  emb_size=512,
                  normalization='BatchNorm',
-                 activation='PReLU'):
+                 activation='PReLU',
+                 rev_alpha=0.01):
         super().__init__()
         normalization = normalizations[normalization]
         activation = activations[activation]
@@ -52,18 +53,34 @@ class MobileNetV2(torch.nn.Module):
                           activation=activation),
             BuildingBlock(first_channels * 6, first_channels * 6, attention=SEAttention, norm=normalization,
                           activation=activation),
+
+        )
+
+        self.cls1 = torch.nn.Sequential(
             # Stage 4
             BuildingBlock(first_channels * 6, first_channels * 8, attention=SEAttention, norm=normalization,
                           activation=activation, stride=2),
             BuildingBlock(first_channels * 8, first_channels * 8, attention=SEAttention, norm=normalization,
                           activation=activation),
             BuildingBlock(first_channels * 8, first_channels * 8, attention=SEAttention, norm=normalization,
-                          activation=activation, r=4),
-
-            torch.nn.AdaptiveAvgPool2d(1)
+                          activation=activation),
+            torch.nn.AdaptiveAvgPool2d(1),
+            torch.nn.Flatten(),
+            torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
+            torch.nn.ReLU(True),
+            torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
+            torch.nn.ReLU(True)
         )
 
-        self.cls = torch.nn.Sequential(
+        self.cls2 = torch.nn.Sequential(
+            # Stage 4
+            BuildingBlock(first_channels * 6, first_channels * 8, attention=SEAttention, norm=normalization,
+                          activation=activation, stride=2),
+            BuildingBlock(first_channels * 8, first_channels * 8, attention=SEAttention, norm=normalization,
+                          activation=activation),
+            BuildingBlock(first_channels * 8, first_channels * 8, attention=SEAttention, norm=normalization,
+                          activation=activation),
+            torch.nn.AdaptiveAvgPool2d(1),
             torch.nn.Flatten(),
             torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
             torch.nn.ReLU(True),
@@ -74,16 +91,41 @@ class MobileNetV2(torch.nn.Module):
         self.lin1 = torch.nn.Linear(emb_size, 2)
         self.lin2 = torch.nn.Linear(emb_size, 6)
 
+        self.lin1_extra = torch.nn.Linear(emb_size, 6)
+        self.lin2_extra = torch.nn.Linear(emb_size, 2)
+        self.reversal1 = RevGrad(rev_alpha)
+        self.reversal2 = RevGrad(rev_alpha)
+
     def forward(self, img):
         emb = self.extractor(img)
-        emb = self.cls(emb)
+        emb1 = self.cls1(emb)
+        emb2 = self.cls2(emb)
 
-        return self.lin1(emb), self.lin2(emb)
+        if self.training:
+            return (self.lin1(emb1),
+                    self.lin2(emb2),
+                    self.reversal1(self.lin1_extra(emb1)),
+                    self.reversal2(self.lin2_extra(emb2)))
+        return self.lin1(emb1), self.lin2(emb2)
+
+    def get_params1(self):
+        lst = []
+        for name, p in self.named_parameters():
+            if 'lin2.' not in name:
+                lst.append(p)
+        return lst
+
+    def get_params2(self):
+        lst = []
+        for name, p in self.named_parameters():
+            if 'lin1.' not in name:
+                lst.append(p)
+        return lst
 
 
 if __name__ == '__main__':
     # Test size
-    net = MobileNetV2(first_channels=20).cuda()
+    net = MobileNetV2TwoBranches(first_channels=20).cuda()
     img = torch.rand(24, 1, 576, 576, device='cuda:0')
 
     cls, energy = net(img)
@@ -92,7 +134,7 @@ if __name__ == '__main__':
 
     from thop import profile, clever_format
 
-    net = MobileNetV2(first_channels=20)
+    net = MobileNetV2TwoBranches(first_channels=20)
     print(net)
     # print(net.params_full)
     x = torch.rand(1, 1, 576, 576)

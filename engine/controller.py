@@ -45,9 +45,9 @@ class Controller(pl.LightningModule):
             self.load()
 
     def training_step(self, batch, batch_idx: int, optimizer_idx=0):
-        pred_cls, pred_energy = self(batch['img'])
-        loss1 = self.loss_cls(pred_cls, batch['cls'])
-        loss2 = self.loss_energy(pred_energy, batch['energy'])
+        pred_cls, pred_energy, rev_cls, rev_energy = self(batch['img'])
+        loss1 = self.loss_cls(pred_cls, batch['cls']) + self.loss_energy(rev_cls, batch['energy'])
+        loss2 = self.loss_energy(pred_energy, batch['energy']) + self.loss_cls(rev_energy, batch['cls'])
         loss = loss1 + self.a * loss2
         self.running_loss(loss.item())
         return loss
@@ -73,12 +73,14 @@ class Controller(pl.LightningModule):
     # Configuration
     def configure_optimizers(self):
         if self._optim is None:
-            opt = self.cfg.optim_factory(self.module.parameters())
+            # opt = [self.cfg.optim_factory(self.module.parameters())]
+            opt = [self.cfg.optim_factory(self.module.get_params1(), 0.01),
+                   self.cfg.optim_factory(self.module.get_params2(), 0.001)]
             self._optim = [opt]
         else:
             opt = self._optim[0]
-        lr_sched = self.cfg.lr_sched_factory(opt, self.current_epoch - 1)
-        return [opt], [lr_sched]
+        lr_sched = [self.cfg.lr_sched_factory(opt[i], self.current_epoch - 1) for i in range(len(opt))]
+        return opt, lr_sched
 
     def train_dataloader(self) -> DataLoader:
         ds = self.train_ds
