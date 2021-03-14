@@ -9,7 +9,7 @@ import torchvision
 from pytorch_lightning import Trainer
 
 from engine import Controller
-from models import *
+from models.mobilenetv2_twolittle import DoubleMobile
 
 
 class DictWrapper:
@@ -51,19 +51,19 @@ def init_logging(log_path):
 
 def main():
     cfg = DictWrapper({
-        'optim_factory': lambda p, lr=0.001: torch.optim.SGD(p, lr, 0.9, weight_decay=0.00001),
+        'optim_factory': lambda p, lr=0.01: torch.optim.SGD(p, lr, 0.9, weight_decay=0.00001),
         'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 10, 0.1, last_epoch),
         'path': 'D:\\IDAO\\data\\train',
         'path_to_checkpoint': None,
-        'path_to_results': 'D:\\IDAO\\results\\4',
-        'batch_size': 16,
+        'path_to_results': 'D:\\IDAO\\results\\6',
+        'batch_size': 12,
         'transform': torchvision.transforms.Compose([
             torchvision.transforms.Lambda(np.array),
             torchvision.transforms.ToTensor()
         ]),
         'seed': 123,
         # 'module_factory': lambda: MobileNetV2(first_channels=20)
-        'module_factory': lambda: MobileNetV2TwoBranches(first_channels=20, rev_alpha=0.0001, emb_size=128)
+        'module_factory': lambda: DoubleMobile(first_channels=20, rev_alpha=1., emb_size=128)
     })
 
     pytorch_lightning.seed_everything(cfg.seed)

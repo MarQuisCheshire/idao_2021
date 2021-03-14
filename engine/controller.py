@@ -1,11 +1,12 @@
 import logging
 import os
-from typing import Union, List, Any
+from typing import Union, List, Any, Callable, Optional
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 from sklearn.metrics import roc_auc_score
+from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
 from dataset import PartDataset
@@ -52,6 +53,24 @@ class Controller(pl.LightningModule):
         self.running_loss(loss.item())
         return loss
 
+    def optimizer_step(
+        self,
+        epoch: int = None,
+        batch_idx: int = None,
+        optimizer: Optimizer = None,
+        optimizer_idx: int = None,
+        optimizer_closure: Optional[Callable] = None,
+        on_tpu: bool = None,
+        using_native_amp: bool = None,
+        using_lbfgs: bool = None,
+    ) -> None:
+        optimizer.step(closure=optimizer_closure)
+
+    def optimizer_zero_grad(
+        self, epoch: int, batch_idx: int, optimizer: Optimizer, optimizer_idx: int
+    ):
+        optimizer.zero_grad()
+
     def validation_step(self, batch, batch_idx: int, dalaloader_idx=0):
         pred_cls, pred_energy = self(batch['img'])
         return self.softmax(pred_cls), self.softmax(pred_energy), batch['cls'], batch['energy']
@@ -73,10 +92,8 @@ class Controller(pl.LightningModule):
     # Configuration
     def configure_optimizers(self):
         if self._optim is None:
-            # opt = [self.cfg.optim_factory(self.module.parameters())]
-            opt = [self.cfg.optim_factory(self.module.get_params1(), 0.01),
-                   self.cfg.optim_factory(self.module.get_params2(), 0.001)]
-            self._optim = [opt]
+            opt = [self.cfg.optim_factory(self.module.parameters(), 0.01)]
+            self._optim = opt
         else:
             opt = self._optim[0]
         lr_sched = [self.cfg.lr_sched_factory(opt[i], self.current_epoch - 1) for i in range(len(opt))]
