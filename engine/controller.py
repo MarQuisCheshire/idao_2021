@@ -1,16 +1,17 @@
 import logging
 import os
-from typing import Union, List, Any, Callable, Optional
+from collections import defaultdict
+from pathlib import Path
+from typing import Union, List, Any
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 from sklearn.metrics import roc_auc_score
-from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
 from dataset import PartDataset
-from dataset.dataset import gen_train_data, gen_test_data, idx_to_energy
+from dataset import gen_train_data, gen_test_data, idx_to_energy, gen_dataset
 from engine.running_loss import RunningLoss
 
 
@@ -41,7 +42,7 @@ class Controller(pl.LightningModule):
     def forward(self, *args, **kwargs):
         return self.module(*args, *kwargs)
 
-    def on_train_start(self):
+    def on_fit_start(self):
         if self.cfg.get('path_to_checkpoint'):
             self.load()
 
@@ -52,24 +53,6 @@ class Controller(pl.LightningModule):
         loss = loss1 + self.a * loss2
         self.running_loss(loss.item())
         return loss
-
-    def optimizer_step(
-        self,
-        epoch: int = None,
-        batch_idx: int = None,
-        optimizer: Optimizer = None,
-        optimizer_idx: int = None,
-        optimizer_closure: Optional[Callable] = None,
-        on_tpu: bool = None,
-        using_native_amp: bool = None,
-        using_lbfgs: bool = None,
-    ) -> None:
-        optimizer.step(closure=optimizer_closure)
-
-    def optimizer_zero_grad(
-        self, epoch: int, batch_idx: int, optimizer: Optimizer, optimizer_idx: int
-    ):
-        optimizer.zero_grad()
 
     def validation_step(self, batch, batch_idx: int, dalaloader_idx=0):
         pred_cls, pred_energy = self(batch['img'])
@@ -88,6 +71,30 @@ class Controller(pl.LightningModule):
     def training_epoch_end(self, outputs: List[Any]) -> None:
         logging.info(f'\nEPOCH {self.current_epoch}\tLoss {self.running_loss.loss}' + '\n' * 3)
         self.save()
+
+    def test_step(self, batch, batch_idx: int, dalaloader_idx=0):
+        pred_cls, pred_energy = self(batch['img'])
+        return self.softmax(pred_cls), self.softmax(pred_energy), batch['path']
+
+    def test_epoch_end(self, outputs: List[Any]) -> None:
+        counters = []
+        for index in range(len(outputs)):
+            counter = defaultdict(int)
+            data = tuple(zip(*outputs[index]))
+            paths = []
+            for i in data[-1]:
+                for j in i:
+                    paths.append(str(Path(j).resolve().name))
+            cls, energy = [torch.cat(i, dim=0).data.cpu().numpy() for i in data[:-1]]
+            cls = np.argmax(cls, axis=1)
+            energy = [idx_to_energy[i] for i in np.argmax(energy, axis=1)]
+            for part in zip(paths, cls, energy):
+                counter[part[1], part[2]] += 1
+                print(*part, sep=',')
+                if self.cfg.get('results_file'):
+                    print(*part, sep=',', file=self.cfg.results_file)
+            counters.append(counter)
+        print(*counters, sep='\n')
 
     # Configuration
     def configure_optimizers(self):
@@ -115,8 +122,13 @@ class Controller(pl.LightningModule):
 
         val_indices = [i for i in range(len(ds)) if i not in train_indices]
 
-        ds = [PartDataset(ds, val_indices), self.test_ds]
-        return [torch.utils.data.DataLoader(ds[i], self.cfg.batch_size, num_workers=4) for i in range(len(ds))]
+        return [torch.utils.data.DataLoader(PartDataset(ds, val_indices), self.cfg.batch_size, num_workers=2),
+                torch.utils.data.DataLoader(self.test_ds, self.cfg.batch_size)]
+
+    def test_dataloader(self) -> Union[DataLoader, List[DataLoader]]:
+        return [torch.utils.data.DataLoader(i, self.cfg.batch_size, num_workers=2) for i in
+                [gen_dataset(self.cfg.test_path1, self.cfg.transform),
+                 gen_dataset(self.cfg.test_path2, self.cfg.transform)]]
 
     def save(self):
         os.makedirs(self.cfg.path_to_results, exist_ok=True)
@@ -131,7 +143,7 @@ class Controller(pl.LightningModule):
         state = torch.load(self.cfg.path_to_checkpoint, map_location='cpu')
         if self._optim is None:
             self.configure_optimizers()
-        self.module.load_state_dict(state)
+        self.module.load_state_dict(state['model'])
         for i in range(len(state['optimizer'])):
             self._optim[i].load_state_dict(state['optimizer'][i])
         if self.trainer:

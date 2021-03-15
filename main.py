@@ -55,7 +55,7 @@ def main():
         'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 10, 0.1, last_epoch),
         'path': 'D:\\IDAO\\data\\train',
         'path_to_checkpoint': None,
-        'path_to_results': 'D:\\IDAO\\results\\6',
+        'path_to_results': 'D:\\IDAO\\results\\7',
         'batch_size': 12,
         'transform': torchvision.transforms.Compose([
             torchvision.transforms.Lambda(np.array),
@@ -63,7 +63,10 @@ def main():
         ]),
         'seed': 123,
         # 'module_factory': lambda: MobileNetV2(first_channels=20)
-        'module_factory': lambda: DoubleMobile(first_channels=20, rev_alpha=1., emb_size=128)
+        'module_factory': lambda: DoubleMobile(first_channels=20, rev_alpha=1., emb_size=128),
+        'results_file': None,
+        'test_path1': 'D:\\IDAO\\data\\public_test',
+        'test_path2': 'D:\\IDAO\\data\\private_test'
     })
 
     pytorch_lightning.seed_everything(cfg.seed)

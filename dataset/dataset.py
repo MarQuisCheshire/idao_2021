@@ -12,7 +12,7 @@ idx_to_energy = {item: key for key, item in energy_indices.items()}
 train_cases = {(0, 3), (0, 10), (0, 30), (1, 1), (1, 6), (1, 20)}
 
 
-def gen_data(path: Union[str, Path], transform=None):
+def _gen_data(path: Union[str, Path], transform=None):
     path = path if isinstance(path, Path) else Path(path)
     paths = []
     cls_train = []
@@ -46,11 +46,34 @@ def gen_data(path: Union[str, Path], transform=None):
 
 
 def gen_train_data(path: Union[str, Path], transform=None):
-    return gen_data(path, transform)[0]
+    return _gen_data(path, transform)[0]
 
 
 def gen_test_data(path: Union[str, Path], transform=None):
-    return gen_data(path, transform)[1]
+    return _gen_data(path, transform)[1]
+
+
+def gen_dataset(path: Union[str, Path], transform=None):
+    path = path if isinstance(path, Path) else Path(path)
+    paths = []
+    for path, dirs, files in os.walk(str(path.resolve())):
+        paths.extend([os.path.join(path, i) for i in filter(lambda x: x.endswith('.png'), files)])
+    return MySimpleDataset(paths, transform)
+
+
+class MySimpleDataset(Dataset):
+    def __init__(self, paths, transform):
+        self.paths = paths
+        self.tranfrom = transform
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, item):
+        img = Image.open(self.paths[item])
+        if self.tranfrom:
+            img = self.tranfrom(img)
+        return dict(img=img, path=self.paths[item])
 
 
 class ImgDataset(Dataset):
@@ -90,7 +113,7 @@ class PartDataset(Dataset):
 
 
 if __name__ == '__main__':
-    ds = ImgDataset('D:\\IDAO\\data\\train', np.array)
+    ds = gen_train_data('D:\\IDAO\\data\\train', np.array)[0]
     print(ds[0]['img'].shape)
     # dl = torch.utils.data.DataLoader(ds, 100, shuffle=True, drop_last=True, num_workers=4)
     # from tqdm import tqdm
