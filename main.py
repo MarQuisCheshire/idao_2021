@@ -8,7 +8,7 @@ import torch
 import torchvision
 from pytorch_lightning import Trainer
 
-from engine import Controller
+from engine.controller3 import Controller
 from models.mobilenetv2_twolittle import DoubleMobile
 
 
@@ -51,12 +51,13 @@ def init_logging(log_path):
 
 def main():
     cfg = DictWrapper({
-        'optim_factory': lambda p, lr=0.01: torch.optim.SGD(p, lr, 0.9, weight_decay=0.00001),
-        'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 10, 0.1, last_epoch),
+        'optim_factory': lambda p: torch.optim.SGD(p, 0.01, 0.9),
+        # 'optim_factory': lambda p: torch.optim.Adam(p, 0.001),
+        'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 40, 0.1, last_epoch),
         'path': 'D:\\IDAO\\data\\train',
         'path_to_checkpoint': None,
-        'path_to_results': 'D:\\IDAO\\results\\7',
-        'batch_size': 12,
+        'path_to_results': 'D:\\IDAO\\results\\9',
+        'batch_size': 20,
         'transform': torchvision.transforms.Compose([
             torchvision.transforms.Lambda(np.array),
             torchvision.transforms.ToTensor()
@@ -79,7 +80,7 @@ def main():
                       logger=False,
                       checkpoint_callback=False,
                       num_sanity_val_steps=0,
-                      max_epochs=50,
+                      max_epochs=100,
                       )
     trainer.fit(controller)
 

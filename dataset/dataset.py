@@ -58,7 +58,22 @@ def gen_dataset(path: Union[str, Path], transform=None):
     paths = []
     for path, dirs, files in os.walk(str(path.resolve())):
         paths.extend([os.path.join(path, i) for i in filter(lambda x: x.endswith('.png'), files)])
-    return MySimpleDataset(paths, transform)
+    return MySimpleDataset(sorted(paths), transform)
+
+
+class ConcatDataset(Dataset):
+
+    def __init__(self, *datasets):
+        self.datasets = datasets
+
+    def __len__(self):
+        return sum(map(len, self.datasets))
+
+    def __getitem__(self, item):
+        i = 1
+        while item >= sum(map(len, self.datasets[:i])):
+            i += 1
+        return self.datasets[i - 1][item - sum(map(len, self.datasets[:i - 1]))]
 
 
 class MySimpleDataset(Dataset):
@@ -73,7 +88,7 @@ class MySimpleDataset(Dataset):
         img = Image.open(self.paths[item])
         if self.tranfrom:
             img = self.tranfrom(img)
-        return dict(img=img, path=self.paths[item])
+        return dict(img=img, path=self.paths[item], cls=-1, energy=-1)
 
 
 class ImgDataset(Dataset):
@@ -97,7 +112,7 @@ class ImgDataset(Dataset):
 
         if self.transform:
             img = self.transform(img)
-        return dict(img=img, cls=self.cls[item], energy=self.energy[item])
+        return dict(img=img, cls=self.cls[item], energy=self.energy[item], path=path)
 
 
 class PartDataset(Dataset):
@@ -113,7 +128,7 @@ class PartDataset(Dataset):
 
 
 if __name__ == '__main__':
-    ds = gen_train_data('D:\\IDAO\\data\\train', np.array)[0]
+    ds = gen_train_data('D:\\IDAO\\data\\train', np.array)
     print(ds[0]['img'].shape)
     # dl = torch.utils.data.DataLoader(ds, 100, shuffle=True, drop_last=True, num_workers=4)
     # from tqdm import tqdm

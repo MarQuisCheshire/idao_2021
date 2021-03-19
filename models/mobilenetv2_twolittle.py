@@ -62,13 +62,14 @@ class MobileNetV2(torch.nn.Module):
 
 class DoubleMobile(torch.nn.Module):
 
-    def __init__(self, emb_size=512, first_channels=32, rev_alpha=0.01, *args, **kwargs):
+    def __init__(self, emb_size=512, first_channels=32, rev_alpha=0.01, dropout_p=0., *args, **kwargs):
         super().__init__()
         self.ext1 = MobileNetV2(first_channels=first_channels, *args, **kwargs)
         self.ext2 = MobileNetV2(first_channels=first_channels, *args, **kwargs)
 
         self.cls1 = torch.nn.Sequential(
             torch.nn.Flatten(),
+            torch.nn.Dropout(dropout_p, True),
             torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
             torch.nn.ReLU(True),
             torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
@@ -77,25 +78,28 @@ class DoubleMobile(torch.nn.Module):
         )
         self.cls2 = torch.nn.Sequential(
             torch.nn.Flatten(),
+            torch.nn.Dropout(dropout_p, True),
             torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
             torch.nn.ReLU(True),
             torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
             torch.nn.ReLU(True),
-            torch.nn.Linear(emb_size, 6)
+            torch.nn.Linear(emb_size, 1)
         )
 
         self.lin1_extra = torch.nn.Sequential(
             torch.nn.Flatten(),
             RevGrad(rev_alpha),
+            torch.nn.Dropout(dropout_p, True),
             torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
             torch.nn.ReLU(True),
             torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
             torch.nn.ReLU(True),
-            torch.nn.Linear(emb_size, 6)
+            torch.nn.Linear(emb_size, 1)
         )
         self.lin2_extra = torch.nn.Sequential(
             torch.nn.Flatten(),
             RevGrad(rev_alpha),
+            torch.nn.Dropout(dropout_p, True),
             torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
             torch.nn.ReLU(True),
             torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
@@ -103,19 +107,24 @@ class DoubleMobile(torch.nn.Module):
             torch.nn.Linear(emb_size, 2)
         )
 
-    def forward(self, x):
-        cls_emb = self.ext1(x)
-        energy_emb = self.ext2(x)
+    def forward(self, x, net_idx=None):
+        if net_idx is None:
+            cls_, adapt_cls = self._inner_call(x, self.ext1, self.cls1, self.lin1_extra)
+            energy_, adapt_energy = self._inner_call(x, self.ext2, self.cls2, self.lin2_extra)
+            if not self.training:
+                return cls_, energy_
+            return cls_, energy_, adapt_cls, adapt_energy
+        elif net_idx == 0:
+            cls_, adapt_cls = self._inner_call(x, self.ext1, self.cls1, self.lin1_extra)
+            return cls_, None, adapt_cls, None
+        elif net_idx == 1:
+            energy_, adapt_energy = self._inner_call(x, self.ext2, self.cls2, self.lin2_extra)
+            return None, energy_, None, adapt_energy
 
-        cls_ = self.cls1(cls_emb)
-        energy_ = self.cls2(energy_emb)
-
-        if not self.training:
-            return cls_, energy_
-
-        adapt_cls = self.lin1_extra(cls_emb)
-        adapt_energy = self.lin2_extra(energy_emb)
-        return cls_, energy_, adapt_cls, adapt_energy
+    @staticmethod
+    def _inner_call(x, ext, cls, extra_cls):
+        x = ext(x)
+        return cls(x), extra_cls(x)
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ import torch
 from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 
-from dataset import PartDataset
+from dataset import PartDataset, energy_indices
 from dataset import gen_train_data, gen_test_data, idx_to_energy, gen_dataset
 from engine.running_loss import RunningLoss
 
@@ -25,7 +25,7 @@ class Controller(pl.LightningModule):
         self._seed = cfg.seed
 
         self.loss_cls = torch.nn.CrossEntropyLoss()
-        self.loss_energy = torch.nn.CrossEntropyLoss()
+        self.loss_energy = torch.nn.MSELoss()
         self.softmax = torch.nn.Softmax(1)
         self.a = 1.
 
@@ -46,16 +46,23 @@ class Controller(pl.LightningModule):
             self.load()
 
     def training_step(self, batch, batch_idx: int, optimizer_idx=0):
-        pred_cls, pred_energy, rev_cls, rev_energy = self(batch['img'])
-        loss1 = self.loss_cls(pred_cls, batch['cls']) + self.loss_energy(rev_cls, batch['energy'])
-        loss2 = self.loss_energy(pred_energy, batch['energy']) + self.loss_cls(rev_energy, batch['cls'])
-        loss = loss1 + self.a * loss2
+        pred_cls, pred_energy, rev_cls, rev_energy = self(batch['img'], optimizer_idx)
+        # loss1 = self.loss_cls(pred_cls, batch['cls']) + self.loss_energy(rev_cls, batch['energy'])
+        if optimizer_idx == 0:
+            loss1 = self.loss_cls(pred_cls, batch['cls']) + self.a * \
+                    self.loss_energy(rev_cls.flatten(), batch['energy'].float())
+            loss2 = 0.
+        elif optimizer_idx == 1:
+            loss1 = 0.
+            loss2 = self.loss_energy(pred_energy.flatten(), batch['energy'].float()) + self.a * \
+                    self.loss_cls(rev_energy, batch['cls'])
+        loss = loss1 + loss2
         self.running_loss(loss.item())
         return loss
 
     def validation_step(self, batch, batch_idx: int, dalaloader_idx=0):
         pred_cls, pred_energy = self(batch['img'])
-        return self.softmax(pred_cls), self.softmax(pred_energy), batch['cls'], batch['energy']
+        return self.softmax(pred_cls), pred_energy, batch['cls'], batch['energy']
 
     def validation_epoch_end(self, outputs: List[Any]) -> None:
         for index, tag in enumerate(['VAL', 'TEST']):
@@ -86,7 +93,7 @@ class Controller(pl.LightningModule):
                     paths.append(str(Path(j).resolve().name))
             cls, energy = [torch.cat(i, dim=0).data.cpu().numpy() for i in data[:-1]]
             cls = np.argmax(cls, axis=1)
-            energy = [idx_to_energy[i] for i in np.argmax(energy, axis=1)]
+            energy = [idx_to_energy[np.argmin([abs(i - j) for j in energy_indices.keys()])] for i in energy]
             for part in zip(paths, cls, energy):
                 counter[part[1], part[2]] += 1
                 print(*part, sep=',')
@@ -155,10 +162,11 @@ class Controller(pl.LightningModule):
 
     @staticmethod
     def _calculate_metrics(pred_cls, pred_energy, cls, energy):
-        acc = ((np.argmax(pred_cls, axis=1) == cls) & (np.argmax(pred_energy, axis=1) == energy)).mean()
-        pred_energy = [idx_to_energy[i] for i in np.argmax(pred_energy, axis=1)]
-        energy = [idx_to_energy[i] for i in energy]
-        mae = np.abs(np.array(pred_energy) - np.array(energy)).mean()
+        pred_energy = np.array([idx_to_energy[np.argmin([abs(i - j) for j in energy_indices.keys()])] for i in pred_energy])
+        energy = np.array([idx_to_energy[i] for i in energy])
+        acc = ((np.argmax(pred_cls, axis=1) == cls) & (pred_energy == energy)).mean()
+        # energy = [idx_to_energy[np.argmin([abs(i - j) for j in energy_indices.keys()])] for i in energy]
+        mae = np.abs(pred_energy - energy).mean()
         roc_auc = roc_auc_score(cls, np.argmax(pred_cls, axis=1))
         quality_metric = (roc_auc - mae) * 1000
         return acc, mae, roc_auc, quality_metric
