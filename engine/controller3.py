@@ -47,14 +47,17 @@ class Controller(pl.LightningModule):
 
     def training_step(self, batch, batch_idx: int, optimizer_idx=0):
         pred_cls, pred_energy, rev_cls, rev_energy = self(batch['img'], optimizer_idx)
-        # loss1 = self.loss_cls(pred_cls, batch['cls']) + self.loss_energy(rev_cls, batch['energy'])
+        # need real energy for regression
+        true_energy = torch.tensor([idx_to_energy[i] for i in batch['energy'].data.cpu().numpy()],
+                                   device=self.device).float()
         if optimizer_idx == 0:
             loss1 = self.loss_cls(pred_cls, batch['cls']) + self.a * \
-                    self.loss_energy(rev_cls.flatten(), batch['energy'].float())
+                    self.loss_energy(rev_cls.flatten(), true_energy)
             loss2 = 0.
         elif optimizer_idx == 1:
             loss1 = 0.
-            loss2 = self.loss_energy(pred_energy.flatten(), batch['energy'].float()) + self.a * \
+
+            loss2 = self.loss_energy(pred_energy.flatten(), true_energy) + self.a * \
                     self.loss_cls(rev_energy, batch['cls'])
         loss = loss1 + loss2
         self.running_loss(loss.item())
