@@ -28,7 +28,7 @@ class Controller(pl.LightningModule):
         self.loss_energy = torch.nn.MSELoss()
         self.softmax = torch.nn.Softmax(1)
         self.a = 0.6
-        self.b = 0.95
+        self.b = 0.8
 
         self.running_loss = RunningLoss()
         self._optim = None
