@@ -9,6 +9,7 @@ import torchvision
 from pytorch_lightning import Trainer
 
 from engine.controller3 import Controller
+from models import MiniDoubleMobile
 from models.mobilenetv2_twolittle import DoubleMobile
 
 
@@ -51,27 +52,27 @@ def init_logging(log_path):
 
 def main():
     cfg = DictWrapper({
-        'optim_factory': lambda p: torch.optim.SGD(p, 0.01, 0.9),
-        # 'optim_factory': lambda p: torch.optim.Adam(p, 0.001),
-        'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 40, 0.1, last_epoch),
+        # 'optim_factory': lambda p: torch.optim.SGD(p, 0.005, 0.9, weight_decay=0.00001),
+        'optim_factory': lambda p: torch.optim.Adam(p, 0.001),
+        'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 20, 0.1, last_epoch),
         'path': 'D:\\IDAO\\data\\train',
         'path_to_checkpoint': None,
-        'path_to_results': 'D:\\IDAO\\results\\9',
-        'batch_size': 20,
+        'path_to_results': 'D:\\IDAO\\results\\regression\\120x120\\2',
+        'batch_size': 32,
         'transform': torchvision.transforms.Compose([
             torchvision.transforms.Lambda(np.array),
-            torchvision.transforms.ToTensor()
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.CenterCrop(120)
         ]),
         'seed': 123,
         # 'module_factory': lambda: MobileNetV2(first_channels=20)
-        'module_factory': lambda: DoubleMobile(first_channels=20, rev_alpha=1., emb_size=128),
+        'module_factory': lambda: MiniDoubleMobile(first_channels=20, rev_alpha=1., emb_size=256, dropout_p=0.0),
         'results_file': None,
         'test_path1': 'D:\\IDAO\\data\\public_test',
         'test_path2': 'D:\\IDAO\\data\\private_test'
     })
 
     pytorch_lightning.seed_everything(cfg.seed)
-    torch.cuda.empty_cache()
     os.makedirs(cfg.path_to_results, exist_ok=True)
     init_logging(cfg.path_to_results)
 
@@ -80,7 +81,7 @@ def main():
                       logger=False,
                       checkpoint_callback=False,
                       num_sanity_val_steps=0,
-                      max_epochs=100,
+                      max_epochs=50,
                       )
     trainer.fit(controller)
 

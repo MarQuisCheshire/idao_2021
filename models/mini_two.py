@@ -37,9 +37,15 @@ class MobileNetV2(torch.nn.Module):
                           activation=activation),
             BuildingBlock(first_channels * 2, first_channels * 2, attention=SEAttention, norm=normalization,
                           activation=activation),
+            BuildingBlock(first_channels * 2, first_channels * 2, attention=SEAttention, norm=normalization,
+                          activation=activation),
+            BuildingBlock(first_channels * 2, first_channels * 2, attention=SEAttention, norm=normalization,
+                          activation=activation),
             # Stage 2
             BuildingBlock(first_channels * 2, first_channels * 4, attention=SEAttention, norm=normalization,
                           activation=activation, stride=2),
+            BuildingBlock(first_channels * 4, first_channels * 4, attention=SEAttention, norm=normalization,
+                          activation=activation),
             BuildingBlock(first_channels * 4, first_channels * 4, attention=SEAttention, norm=normalization,
                           activation=activation),
             BuildingBlock(first_channels * 4, first_channels * 4, attention=SEAttention, norm=normalization,
@@ -48,9 +54,7 @@ class MobileNetV2(torch.nn.Module):
             BuildingBlock(first_channels * 4, first_channels * 8, attention=SEAttention, norm=normalization,
                           activation=activation, stride=2),
             BuildingBlock(first_channels * 8, first_channels * 8, attention=SEAttention, norm=normalization,
-                          activation=activation, stride=2),
-            BuildingBlock(first_channels * 8, first_channels * 8, attention=SEAttention, norm=normalization,
-                          activation=activation, r=4),
+                          activation=activation),
 
             torch.nn.AdaptiveAvgPool2d(1)
         )
@@ -60,7 +64,7 @@ class MobileNetV2(torch.nn.Module):
         return emb
 
 
-class DoubleMobile(torch.nn.Module):
+class MiniDoubleMobile(torch.nn.Module):
 
     def __init__(self, emb_size=512, first_channels=32, rev_alpha=0.01, dropout_p=0., *args, **kwargs):
         super().__init__()
@@ -69,40 +73,32 @@ class DoubleMobile(torch.nn.Module):
 
         self.cls1 = torch.nn.Sequential(
             torch.nn.Flatten(),
-            # torch.nn.Dropout(dropout_p),
-            torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
-            torch.nn.ReLU(True),
-            torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
+            torch.nn.Dropout(dropout_p),
+            torch.nn.Linear(first_channels * 8, emb_size),
             torch.nn.ReLU(True),
             torch.nn.Linear(emb_size, 2)
         )
         self.cls2 = torch.nn.Sequential(
             torch.nn.Flatten(),
-            # torch.nn.Dropout(dropout_p),
-            torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
+            torch.nn.Dropout(dropout_p),
+            torch.nn.Linear(first_channels * 8, emb_size),
             torch.nn.ReLU(True),
-            torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
-            torch.nn.ReLU(True),
-            torch.nn.Linear(emb_size, 6)
+            torch.nn.Linear(emb_size, 1)
         )
 
         self.lin1_extra = torch.nn.Sequential(
             torch.nn.Flatten(),
             RevGrad(rev_alpha),
-            # torch.nn.Dropout(dropout_p),
-            torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
-            torch.nn.ReLU(True),
-            torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
+            torch.nn.Dropout(dropout_p),
+            torch.nn.Linear(first_channels * 8, emb_size),
             torch.nn.ReLU(True),
             torch.nn.Linear(emb_size, 6)
         )
         self.lin2_extra = torch.nn.Sequential(
             torch.nn.Flatten(),
             RevGrad(rev_alpha),
-            # torch.nn.Dropout(dropout_p),
-            torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
-            torch.nn.ReLU(True),
-            torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
+            torch.nn.Dropout(dropout_p),
+            torch.nn.Linear(first_channels * 8, emb_size),
             torch.nn.ReLU(True),
             torch.nn.Linear(emb_size, 2)
         )

@@ -27,7 +27,8 @@ class Controller(pl.LightningModule):
         self.loss_cls = torch.nn.CrossEntropyLoss()
         self.loss_energy = torch.nn.CrossEntropyLoss()
         self.softmax = torch.nn.Softmax(1)
-        self.a = 1.
+        self.a = 1.0
+        self.b = 1.
 
         self.running_loss = RunningLoss()
         self._optim = None
@@ -45,11 +46,15 @@ class Controller(pl.LightningModule):
         if self.cfg.get('path_to_checkpoint'):
             self.load()
 
-    def training_step(self, batch, batch_idx: int, optimizer_idx=0):
-        pred_cls, pred_energy, rev_cls, rev_energy = self(batch['img'])
-        loss1 = self.loss_cls(pred_cls, batch['cls']) + self.loss_energy(rev_cls, batch['energy'])
-        loss2 = self.loss_energy(pred_energy, batch['energy']) + self.loss_cls(rev_energy, batch['cls'])
-        loss = loss1 + self.a * loss2
+    def training_step(self, batch, batch_idx: int, optimizer_idx=None):
+        pred_cls, pred_energy, rev_cls, rev_energy = self(batch['img'], optimizer_idx)
+        if optimizer_idx == 0:
+            loss = self.loss_cls(pred_cls, batch['cls']) + self.a * self.loss_energy(rev_cls, batch['energy'])
+        elif optimizer_idx == 1:
+            loss = self.loss_energy(pred_energy, batch['energy']) + self.b * self.loss_cls(rev_energy, batch['cls'])
+        else:
+            loss = self.loss_cls(pred_cls, batch['cls']) + self.a * self.loss_energy(rev_cls, batch['energy'])
+            loss += self.loss_energy(pred_energy, batch['energy']) + self.b * self.loss_cls(rev_energy, batch['cls'])
         self.running_loss(loss.item())
         return loss
 
@@ -76,6 +81,10 @@ class Controller(pl.LightningModule):
         return self.softmax(pred_cls), self.softmax(pred_energy), batch['path']
 
     def test_epoch_end(self, outputs: List[Any]) -> None:
+        f = None
+        if self.cfg.get('results_file'):
+            f = open(self.cfg['results_file'], 'w')
+            print('id,classification_predictions,regression_predictions', file=f)
         counters = []
         for index in range(len(outputs)):
             counter = defaultdict(int)
@@ -83,27 +92,30 @@ class Controller(pl.LightningModule):
             paths = []
             for i in data[-1]:
                 for j in i:
-                    paths.append(str(Path(j).resolve().name))
+                    paths.append(str(Path(j).resolve().name)[:-4])
             cls, energy = [torch.cat(i, dim=0).data.cpu().numpy() for i in data[:-1]]
-            cls = np.argmax(cls, axis=1)
+            cls = (np.argmax(cls, axis=1) - 1) * (-1)
             energy = [idx_to_energy[i] for i in np.argmax(energy, axis=1)]
             for part in zip(paths, cls, energy):
                 counter[part[1], part[2]] += 1
                 print(*part, sep=',')
-                if self.cfg.get('results_file'):
-                    print(*part, sep=',', file=self.cfg.results_file)
+                if f:
+                    print(*part, sep=',', file=f)
             counters.append(counter)
+        if f:
+            f.close()
         print(*counters, sep='\n')
 
     # Configuration
     def configure_optimizers(self):
         if self._optim is None:
-            opt = [self.cfg.optim_factory(list(self.module.ext1.parameters()) +
-                                          list(self.module.cls1.parameters()) +
-                                          list(self.module.lin1_extra.parameters())),
-                   self.cfg.optim_factory(list(self.module.ext2.parameters()) +
-                                          list(self.module.cls2.parameters()) +
-                                          list(self.module.lin2_extra.parameters()))]
+            # opt = [self.cfg.optim_factory(list(self.module.ext1.parameters()) +
+            #                               list(self.module.cls1.parameters()) +
+            #                               list(self.module.lin1_extra.parameters())),
+            #        self.cfg.optim_factory(list(self.module.ext2.parameters()) +
+            #                               list(self.module.cls2.parameters()) +
+            #                               list(self.module.lin2_extra.parameters()))]
+            opt = [self.cfg.optim_factory(self.module.parameters())]
             self._optim = opt
         else:
             opt = self._optim
@@ -130,7 +142,7 @@ class Controller(pl.LightningModule):
                 torch.utils.data.DataLoader(self.test_ds, self.cfg.batch_size)]
 
     def test_dataloader(self) -> Union[DataLoader, List[DataLoader]]:
-        return [torch.utils.data.DataLoader(i, self.cfg.batch_size, num_workers=4) for i in
+        return [torch.utils.data.DataLoader(i, self.cfg.batch_size, num_workers=2) for i in
                 [gen_dataset(self.cfg.test_path1, self.cfg.transform),
                  gen_dataset(self.cfg.test_path2, self.cfg.transform)]]
 

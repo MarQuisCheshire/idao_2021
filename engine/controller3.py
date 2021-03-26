@@ -27,7 +27,8 @@ class Controller(pl.LightningModule):
         self.loss_cls = torch.nn.CrossEntropyLoss()
         self.loss_energy = torch.nn.MSELoss()
         self.softmax = torch.nn.Softmax(1)
-        self.a = 1.
+        self.a = 0.6
+        self.b = 0.95
 
         self.running_loss = RunningLoss()
         self._optim = None
@@ -51,15 +52,11 @@ class Controller(pl.LightningModule):
         true_energy = torch.tensor([idx_to_energy[i] for i in batch['energy'].data.cpu().numpy()],
                                    device=self.device).float()
         if optimizer_idx == 0:
-            loss1 = self.loss_cls(pred_cls, batch['cls']) + self.a * \
-                    self.loss_energy(rev_cls.flatten(), true_energy)
-            loss2 = 0.
+            loss = self.loss_cls(pred_cls, batch['cls']) + self.a * \
+                    self.loss_cls(rev_cls, batch['energy'])
         elif optimizer_idx == 1:
-            loss1 = 0.
-
-            loss2 = self.loss_energy(pred_energy.flatten(), true_energy) + self.a * \
+            loss = self.loss_energy(pred_energy.flatten(), true_energy) + self.b * \
                     self.loss_cls(rev_energy, batch['cls'])
-        loss = loss1 + loss2
         self.running_loss(loss.item())
         return loss
 
@@ -83,9 +80,13 @@ class Controller(pl.LightningModule):
 
     def test_step(self, batch, batch_idx: int, dalaloader_idx=0):
         pred_cls, pred_energy = self(batch['img'])
-        return self.softmax(pred_cls), self.softmax(pred_energy), batch['path']
+        return self.softmax(pred_cls), pred_energy, batch['path']
 
     def test_epoch_end(self, outputs: List[Any]) -> None:
+        f = None
+        if self.cfg.get('results_file'):
+            f = open(self.cfg['results_file'], 'w')
+            print('id,classification_predictions,regression_predictions', file=f)
         counters = []
         for index in range(len(outputs)):
             counter = defaultdict(int)
@@ -93,16 +94,19 @@ class Controller(pl.LightningModule):
             paths = []
             for i in data[-1]:
                 for j in i:
-                    paths.append(str(Path(j).resolve().name))
+                    paths.append(str(Path(j).resolve().name)[:-4])
             cls, energy = [torch.cat(i, dim=0).data.cpu().numpy() for i in data[:-1]]
-            cls = np.argmax(cls, axis=1)
+            # cls = np.argmax(cls, axis=1)
+            cls = (np.argmax(cls, axis=1) - 1) * (-1)
             energy = [idx_to_energy[np.argmin([abs(i - j) for j in energy_indices.keys()])] for i in energy]
             for part in zip(paths, cls, energy):
                 counter[part[1], part[2]] += 1
                 print(*part, sep=',')
-                if self.cfg.get('results_file'):
-                    print(*part, sep=',', file=self.cfg.results_file)
+                if f:
+                    print(*part, sep=',', file=f)
             counters.append(counter)
+        if f:
+            f.close()
         print(*counters, sep='\n')
 
     # Configuration

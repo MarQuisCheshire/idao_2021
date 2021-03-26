@@ -10,6 +10,7 @@ cls_indices = dict(ER=0, He_NR=1)
 energy_indices = {1: 0, 3: 1, 6: 2, 10: 3, 20: 4, 30: 5}
 idx_to_energy = {item: key for key, item in energy_indices.items()}
 train_cases = {(0, 3), (0, 10), (0, 30), (1, 1), (1, 6), (1, 20)}
+test_cases = {(0, 1), (0, 6), (0, 20), (1, 3), (1, 10), (1, 30)}
 
 
 def _gen_data(path: Union[str, Path], transform=None):
