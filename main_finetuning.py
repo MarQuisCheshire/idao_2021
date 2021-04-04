@@ -54,7 +54,7 @@ def init_logging(log_path):
 def main():
     cfg = DictWrapper({
         # 'optim_factory': lambda p: torch.optim.SGD(p, 0.000001, momentum=0.9),
-        'optim_factory': lambda p: torch.optim.Adam(p, 0.001),
+        'optim_factory': lambda p: torch.optim.Adam(p, 0.000001),
         'lr_sched_factory': lambda opt, last_epoch: torch.optim.lr_scheduler.StepLR(opt, 50, 0.1, last_epoch),
         'path': 'D:\\IDAO\\data\\train',
         'path_to_checkpoint': None,

@@ -1,6 +1,6 @@
 import torch
 
-from models.blocks import Swish, BuildingBlock, SEAttention
+from models.blocks import Swish, BuildingBlock, SEAttention, RevGrad
 
 normalizations = {
     'BatchNorm': torch.nn.BatchNorm2d,
@@ -18,7 +18,6 @@ class MobileNetV2(torch.nn.Module):
     def __init__(self,
                  img_channels=1,
                  first_channels=32,
-                 emb_size=512,
                  normalization='BatchNorm',
                  activation='PReLU'):
         super().__init__()
@@ -45,40 +44,87 @@ class MobileNetV2(torch.nn.Module):
                           activation=activation),
             BuildingBlock(first_channels * 4, first_channels * 4, attention=SEAttention, norm=normalization,
                           activation=activation),
-            # Stage 3
-            BuildingBlock(first_channels * 4, first_channels * 6, attention=SEAttention, norm=normalization,
-                          activation=activation, stride=2),
-            BuildingBlock(first_channels * 6, first_channels * 6, attention=SEAttention, norm=normalization,
-                          activation=activation),
-            BuildingBlock(first_channels * 6, first_channels * 6, attention=SEAttention, norm=normalization,
-                          activation=activation),
             # Stage 4
-            BuildingBlock(first_channels * 6, first_channels * 8, attention=SEAttention, norm=normalization,
+            BuildingBlock(first_channels * 4, first_channels * 8, attention=SEAttention, norm=normalization,
                           activation=activation, stride=2),
             BuildingBlock(first_channels * 8, first_channels * 8, attention=SEAttention, norm=normalization,
-                          activation=activation),
+                          activation=activation, stride=2),
             BuildingBlock(first_channels * 8, first_channels * 8, attention=SEAttention, norm=normalization,
                           activation=activation, r=4),
 
             torch.nn.AdaptiveAvgPool2d(1)
         )
 
-        self.cls = torch.nn.Sequential(
+    def forward(self, img):
+        emb = self.extractor(img)
+        return emb
+
+
+class DoubleMobile(torch.nn.Module):
+
+    def __init__(self, emb_size=512, first_channels=32, rev_alpha=0.01, dropout_p=0., *args, **kwargs):
+        super().__init__()
+        self.ext1 = MobileNetV2(first_channels=first_channels, *args, **kwargs)
+        self.ext2 = MobileNetV2(first_channels=first_channels, *args, **kwargs)
+
+        self.cls1 = torch.nn.Sequential(
             torch.nn.Flatten(),
+            # torch.nn.Dropout(dropout_p),
             torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
             torch.nn.ReLU(True),
             torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
-            torch.nn.ReLU(True)
+            torch.nn.ReLU(True),
+            torch.nn.Linear(emb_size, 2)
+        )
+        self.cls2 = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            # torch.nn.Dropout(dropout_p),
+            torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
+            torch.nn.ReLU(True),
+            torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
+            torch.nn.ReLU(True),
+            torch.nn.Linear(emb_size, 6)
         )
 
-        self.lin1 = torch.nn.Linear(emb_size, 2)
-        self.lin2 = torch.nn.Linear(emb_size, 6)
+        self.lin1_extra = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            RevGrad(rev_alpha),
+            # torch.nn.Dropout(dropout_p),
+            torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
+            torch.nn.ReLU(True),
+            torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
+            torch.nn.ReLU(True),
+            torch.nn.Linear(emb_size, 6)
+        )
+        self.lin2_extra = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            RevGrad(rev_alpha),
+            # torch.nn.Dropout(dropout_p),
+            torch.nn.Linear(first_channels * 8, max(first_channels * 8, 1024)),
+            torch.nn.ReLU(True),
+            torch.nn.Linear(max(first_channels * 8, 1024), emb_size),
+            torch.nn.ReLU(True),
+            torch.nn.Linear(emb_size, 2)
+        )
 
-    def forward(self, img):
-        emb = self.extractor(img)
-        emb = self.cls(emb)
+    def forward(self, x, net_idx=None):
+        if net_idx is None:
+            cls_, adapt_cls = self._inner_call(x, self.ext1, self.cls1, self.lin1_extra)
+            energy_, adapt_energy = self._inner_call(x, self.ext2, self.cls2, self.lin2_extra)
+            if not self.training:
+                return cls_, energy_
+            return cls_, energy_, adapt_cls, adapt_energy
+        elif net_idx == 0:
+            cls_, adapt_cls = self._inner_call(x, self.ext1, self.cls1, self.lin1_extra)
+            return cls_, None, adapt_cls, None
+        elif net_idx == 1:
+            energy_, adapt_energy = self._inner_call(x, self.ext2, self.cls2, self.lin2_extra)
+            return None, energy_, None, adapt_energy
 
-        return self.lin1(emb), self.lin2(emb)
+    @staticmethod
+    def _inner_call(x, ext, cls, extra_cls):
+        x = ext(x)
+        return cls(x), extra_cls(x)
 
 
 if __name__ == '__main__':
