@@ -8,7 +8,8 @@ import torch
 import torchvision
 from pytorch_lightning import Trainer
 
-from engine.controller6 import Controller
+from engine.controller3 import Controller
+# from engine.controller3 import Controller # stage 3
 from models import MiniDoubleMobile
 from models.final import MiniDoubleMobileVersion2
 from models.mobilenetv2_twolittle import DoubleMobile
