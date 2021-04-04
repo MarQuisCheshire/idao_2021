@@ -50,6 +50,7 @@ class MobileNetV2(torch.nn.Module):
                           activation=activation),
             BuildingBlock(first_channels * 4, first_channels * 4, attention=SEAttention, norm=normalization,
                           activation=activation),
+            #
             # Stage 4
             BuildingBlock(first_channels * 4, first_channels * 8, attention=SEAttention, norm=normalization,
                           activation=activation, stride=2),
@@ -57,6 +58,7 @@ class MobileNetV2(torch.nn.Module):
                           activation=activation),
 
             torch.nn.AdaptiveAvgPool2d(1)
+            # torch.nn.Conv2d(first_channels * 8, first_channels * 8, 5, groups=first_channels * 8)
         )
 
     def forward(self, img):
@@ -64,7 +66,7 @@ class MobileNetV2(torch.nn.Module):
         return emb
 
 
-class MiniDoubleMobile(torch.nn.Module):
+class MiniDoubleMobileVersion2(torch.nn.Module):
 
     def __init__(self, emb_size=512, first_channels=32, rev_alpha=0.01, dropout_p=0., *args, **kwargs):
         super().__init__()
@@ -103,7 +105,7 @@ class MiniDoubleMobile(torch.nn.Module):
             torch.nn.Linear(emb_size, 2)
         )
 
-        self.las1 = None
+        self.last1 = None
         self.last2 = None
 
     def forward(self, x, net_idx=None):
@@ -126,25 +128,25 @@ class MiniDoubleMobile(torch.nn.Module):
         if index:
             self.last2 = x
         else:
-            self.las1 = x
+            self.last1 = x
         return cls(x), extra_cls(x)
 
 
 if __name__ == '__main__':
     # Test size
-    net = MobileNetV2(first_channels=20).cuda()
-    img = torch.rand(24, 1, 576, 576, device='cuda:0')
-
-    cls, energy = net(img)
-    ((cls ** 2).mean() + (energy ** 2).mean()).backward()
-    del net
+    # net = MiniDoubleMobileVersion2(first_channels=20).cuda()
+    # img = torch.rand(24, 1, 120, 120, device='cuda:0')
+    #
+    # cls, energy = net(img)
+    # ((cls ** 2).mean() + (energy ** 2).mean()).backward()
+    # del net
 
     from thop import profile, clever_format
 
-    net = MobileNetV2(first_channels=20)
+    net = MiniDoubleMobileVersion2(first_channels=32, rev_alpha=1., emb_size=256, dropout_p=0.0)
     print(net)
     # print(net.params_full)
-    x = torch.rand(1, 1, 576, 576)
+    x = torch.rand(1, 1, 120, 120)
     flops, params = profile(net, inputs=(x,))
 
     flops, params = clever_format([flops, params], "%.3f")

@@ -1,13 +1,15 @@
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from pathlib import Path
 from typing import List, Any
 
 import numpy as np
 import torch
 import torchvision
+from tqdm import tqdm
 
 from dataset import gen_dataset, idx_to_energy, energy_indices
 from models import MiniDoubleMobile
+from models.final import MiniDoubleMobileVersion2
 
 
 def test_step(model, batch):
@@ -30,6 +32,7 @@ def test_epoch_end(outputs: List[Any], results_file=None) -> None:
                 paths.append(str(Path(j).resolve().name)[:-4])
         cls, energy = [torch.cat(i, dim=0).data.cpu().numpy() for i in data[:-1]]
         cls = (np.argmax(cls, axis=1) - 1) * (-1)
+        # cls = np.argmax(cls, axis=1)
         energy = [idx_to_energy[np.argmin([abs(i - j) for j in energy_indices.keys()])] for i in energy]
         for part in zip(paths, cls, energy):
             counter[part[1], part[2]] += 1
@@ -38,11 +41,12 @@ def test_epoch_end(outputs: List[Any], results_file=None) -> None:
         counters.append(counter)
     if f:
         f.close()
+    print(*counters)
 
 
 if __name__ == '__main__':
-    model = MiniDoubleMobile(first_channels=20, rev_alpha=1., emb_size=256, dropout_p=0.0)
-    model.load_state_dict(torch.load('check_19.pth', map_location='cpu')['model'])
+    model = MiniDoubleMobileVersion2(first_channels=20, rev_alpha=1., emb_size=256)
+    model.load_state_dict(torch.load('result_state_1_4.pth', map_location='cpu'))
     model.eval()
     torch.set_grad_enabled(False)
 
@@ -57,7 +61,7 @@ if __name__ == '__main__':
     outp_lst = []
     for ds_index, ds in enumerate((d1, d2)):
         outp_lst.append([])
-        for batch_index, batch in enumerate(ds):
+        for batch_index, batch in tqdm(enumerate(ds), total=len(ds)):
             outp = test_step(model, batch)
             outp_lst[-1].append(outp)
 

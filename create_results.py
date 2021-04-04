@@ -16,7 +16,8 @@ if __name__ == '__main__':
         # 'path_to_checkpoint': r'D:\IDAO\results\6\check_13.pth',
         # 'path_to_checkpoint': r'D:\IDAO\results\13\check_7.pth',
         # 'path_to_checkpoint': r'D:\IDAO\results\regression\1\check_22.pth',
-        'path_to_checkpoint': r'D:\IDAO\results\regression\120x120\1\check_19.pth',
+        # 'path_to_checkpoint': r'D:\IDAO\results\regression\120x120\1\check_19.pth', # release 1.0
+        'path_to_checkpoint': 'result_state.pth', # release 2.0
         'path_to_results': 'D:\\IDAO\\results\\7',
         'batch_size': 100,
         'transform': torchvision.transforms.Compose([
@@ -28,9 +29,9 @@ if __name__ == '__main__':
         # 'module_factory': lambda: MobileNetV2(first_channels=20)
         # 'module_factory': lambda: DoubleMobile(first_channels=20, rev_alpha=1., emb_size=128), # 6
         # 'module_factory': lambda: DoubleMobile(first_channels=20, rev_alpha=0.8, emb_size=128, dropout_p=0.4), # 13
-        'module_factory': lambda: MiniDoubleMobile(first_channels=20, rev_alpha=1., emb_size=256, dropout_p=0.0),
+        'module_factory': lambda: MiniDoubleMobile(first_channels=20, rev_alpha=1., emb_size=256, dropout_p=0.0), # release 1.0
 
-        'results_file': 'Try 3.csv',
+        'results_file': 'submission_A.csv',
         'test_path1': 'D:\\IDAO\\data\\public_test',
         'test_path2': 'D:\\IDAO\\data\\private_test'
     })
